@@ -1,0 +1,28 @@
+{
+  "name": "firmware-download-task",
+  "version": "1.0.0",
+  "description": "This repository now contains a Symfony 7 app at the repository root that reimplements the existing firmware download flow and adds a protected admin panel for managing software versions.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/muhammadkhalid621/firmware-download-task.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/muhammadkhalid621/firmware-download-task/issues"
+  },
+  "homepage": "https://github.com/muhammadkhalid621/firmware-download-task#readme",
+  "dependencies": {
+    "@tailwindcss/vite": "^4.2.2",
+    "@vitejs/plugin-vue": "^5.2.4",
+    "tailwindcss": "^4.2.2",
+    "vite": "^6.4.1",
+    "vue": "^3.5.30"
+  }
+}

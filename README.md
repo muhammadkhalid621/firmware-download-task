@@ -159,6 +159,12 @@ Rate limiting is enabled for the exposed APIs:
 
 When a limit is hit, the app returns HTTP `429` with `Retry-After`, `X-RateLimit-Limit`, and `X-RateLimit-Remaining` headers.
 
+Admin API hardening:
+
+- admin login and admin write requests use a session-backed CSRF token
+- admin API errors include a structured `error.code` and `error.message`
+- create, update, and delete actions are appended to `var/audit.log`
+
 ## Notes
 
 - The app is intentionally file-backed so it runs immediately without a database.

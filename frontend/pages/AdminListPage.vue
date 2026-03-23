@@ -41,7 +41,7 @@ async function fetchRows() {
         const data = await response.json();
 
         if (!response.ok) {
-            apiError.value = data.message || 'Failed to load software versions.';
+            apiError.value = data.error?.message || data.message || 'Failed to load software versions.';
             return;
         }
 
@@ -60,11 +60,15 @@ async function deleteRow(id) {
         return;
     }
 
-    const response = await fetch(`${props.payload.apiBase}/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    const response = await fetch(`${props.payload.apiBase}/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ csrfToken: props.payload.csrfToken }),
+    });
     const data = await response.json();
 
     if (!response.ok || !data.success) {
-        window.alert(data.message || 'Delete failed.');
+        window.alert(data.error?.message || data.message || 'Delete failed.');
         return;
     }
 
@@ -152,38 +156,23 @@ onMounted(fetchRows);
         <section class="mt-5 rounded-[2rem] border border-white/70 bg-white/80 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.1)] backdrop-blur sm:p-6">
             <div v-if="notice" class="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">{{ notice }}</div>
             <div class="mb-5 grid gap-3 lg:grid-cols-[1fr_220px_160px]">
-                <input
-                    v-model="search"
-                    type="search"
-                    placeholder="Filter by product, version, or URL"
-                    class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-cyan-600 focus:shadow-[0_0_0_4px_rgba(8,145,178,0.12)]"
-                >
-                <select
-                    v-model="filter"
-                    class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-cyan-600 focus:shadow-[0_0_0_4px_rgba(8,145,178,0.12)]"
-                >
+                <input v-model="search" type="search" placeholder="Filter by product, version, or URL" class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-cyan-600 focus:shadow-[0_0_0_4px_rgba(8,145,178,0.12)]">
+                <select v-model="filter" class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-cyan-600 focus:shadow-[0_0_0_4px_rgba(8,145,178,0.12)]">
                     <option value="all">All entries</option>
                     <option value="latest">Latest only</option>
                     <option value="st">Has ST link</option>
                     <option value="gd">Has GD link</option>
                     <option value="lci">LCI only</option>
                 </select>
-                <select
-                    v-model="perPage"
-                    class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-cyan-600 focus:shadow-[0_0_0_4px_rgba(8,145,178,0.12)]"
-                >
+                <select v-model="perPage" class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-cyan-600 focus:shadow-[0_0_0_4px_rgba(8,145,178,0.12)]">
                     <option :value="10">10 / page</option>
                     <option :value="20">20 / page</option>
                     <option :value="50">50 / page</option>
                 </select>
             </div>
 
-            <div v-if="apiError" class="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">
-                {{ apiError }}
-            </div>
-            <div v-if="isLoading" class="mb-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                Loading software versions...
-            </div>
+            <div v-if="apiError" class="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">{{ apiError }}</div>
+            <div v-if="isLoading" class="mb-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">Loading software versions...</div>
 
             <div class="hidden overflow-hidden rounded-[1.5rem] border border-slate-200 xl:block">
                 <table class="min-w-full divide-y divide-slate-200">
@@ -264,35 +253,15 @@ onMounted(fetchRows);
             </div>
 
             <div class="mt-5 flex flex-col gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:items-center sm:justify-between">
-                <div class="text-sm text-slate-500">
-                    Showing {{ rangeStart }} to {{ rangeEnd }} of {{ meta.total }} matching entries
-                </div>
+                <div class="text-sm text-slate-500">Showing {{ rangeStart }} to {{ rangeEnd }} of {{ meta.total }} matching entries</div>
                 <div class="flex flex-wrap items-center gap-2">
-                    <button
-                        class="inline-flex items-center rounded-xl bg-white px-4 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                        type="button"
-                        :disabled="meta.page <= 1 || isLoading"
-                        @click="page -= 1"
-                    >
-                        Previous
-                    </button>
-                    <div class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
-                        Page {{ meta.page }} / {{ meta.totalPages }}
-                    </div>
-                    <button
-                        class="inline-flex items-center rounded-xl bg-white px-4 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                        type="button"
-                        :disabled="meta.page >= meta.totalPages || isLoading"
-                        @click="page += 1"
-                    >
-                        Next
-                    </button>
+                    <button class="inline-flex items-center rounded-xl bg-white px-4 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50" type="button" :disabled="meta.page <= 1 || isLoading" @click="page -= 1">Previous</button>
+                    <div class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white">Page {{ meta.page }} / {{ meta.totalPages }}</div>
+                    <button class="inline-flex items-center rounded-xl bg-white px-4 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50" type="button" :disabled="meta.page >= meta.totalPages || isLoading" @click="page += 1">Next</button>
                 </div>
             </div>
 
-            <div v-if="!filteredRows.length && !isLoading" class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
-                No entries match the current filter.
-            </div>
+            <div v-if="!filteredRows.length && !isLoading" class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">No entries match the current filter.</div>
         </section>
     </main>
 </template>

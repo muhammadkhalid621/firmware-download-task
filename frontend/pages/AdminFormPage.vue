@@ -51,12 +51,15 @@ async function submit() {
         const response = await fetch(props.payload.apiUrl, {
             method: props.payload.mode === 'edit' ? 'PUT' : 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(form),
+            body: JSON.stringify({
+                ...form,
+                csrfToken: props.payload.csrfToken,
+            }),
         });
 
         const data = await response.json();
         if (!response.ok || !data.success) {
-            errors.value = data.errors || [data.message || 'Save failed.'];
+            errors.value = data.errors || [data.error?.message || data.message || 'Save failed.'];
             return;
         }
 

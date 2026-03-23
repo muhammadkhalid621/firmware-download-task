@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Service\AdminAuthenticator;
+use App\Service\CsrfTokenManager;
 use App\Template\PhpTemplateRenderer;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -16,6 +17,7 @@ final class AdminSecurityController
     public function __construct(
         private readonly PhpTemplateRenderer $renderer,
         private readonly AdminAuthenticator $authenticator,
+        private readonly CsrfTokenManager $csrfTokenManager,
     ) {
     }
 
@@ -32,6 +34,7 @@ final class AdminSecurityController
             'payload' => [
                 'loginUrl' => '/api/admin/login',
                 'redirectTo' => '/admin/software-versions',
+                'csrfToken' => $this->csrfTokenManager->getToken($request),
             ],
         ]));
     }

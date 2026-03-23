@@ -6,6 +6,7 @@ namespace App\Controller;
 
 use App\Repository\SoftwareVersionRepository;
 use App\Service\AdminAuthenticator;
+use App\Service\CsrfTokenManager;
 use App\Service\SoftwareVersionValidator;
 use App\Template\PhpTemplateRenderer;
 use Symfony\Component\HttpFoundation\RedirectResponse;
@@ -20,6 +21,7 @@ final class AdminSoftwareVersionController
         private readonly SoftwareVersionRepository $repository,
         private readonly SoftwareVersionValidator $validator,
         private readonly AdminAuthenticator $authenticator,
+        private readonly CsrfTokenManager $csrfTokenManager,
     ) {
     }
 
@@ -43,6 +45,7 @@ final class AdminSoftwareVersionController
                     'editBaseUrl' => '/admin/software-versions',
                     'initialPage' => 1,
                     'perPage' => 10,
+                    'csrfToken' => $this->csrfTokenManager->getToken($request),
                 ],
             ])
         );
@@ -79,6 +82,7 @@ final class AdminSoftwareVersionController
                     'submitLabel' => 'Create',
                     'cancelUrl' => '/admin/software-versions',
                     'apiUrl' => '/api/admin/software-versions',
+                    'csrfToken' => $this->csrfTokenManager->getToken($request),
                 ],
             ])
         );
@@ -122,6 +126,7 @@ final class AdminSoftwareVersionController
                     'submitLabel' => 'Save changes',
                     'cancelUrl' => '/admin/software-versions',
                     'apiUrl' => '/api/admin/software-versions/' . rawurlencode($id),
+                    'csrfToken' => $this->csrfTokenManager->getToken($request),
                 ],
             ])
         );

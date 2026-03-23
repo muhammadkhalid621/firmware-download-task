@@ -21,12 +21,16 @@ async function submit() {
         const response = await fetch(props.payload.loginUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: username.value, password: password.value }),
+            body: JSON.stringify({
+                username: username.value,
+                password: password.value,
+                csrfToken: props.payload.csrfToken,
+            }),
         });
 
         const data = await response.json();
         if (!response.ok || !data.success) {
-            error.value = data.message || 'Invalid admin credentials.';
+            error.value = data.error?.message || data.message || 'Invalid admin credentials.';
             return;
         }
 
@@ -54,20 +58,6 @@ async function submit() {
                 <p class="mt-5 max-w-lg text-sm leading-7 text-cyan-50/85 sm:text-base">
                     Only authorized staff should be able to change version mappings. Sign in to manage the firmware lookup dataset safely.
                 </p>
-                <div class="mt-8 grid gap-3 sm:grid-cols-3">
-                    <div class="rounded-2xl border border-white/10 bg-white/10 p-4">
-                        <div class="text-xs uppercase tracking-[0.16em] text-cyan-100/80">Protected</div>
-                        <div class="mt-2 text-sm font-medium">Session-based admin access</div>
-                    </div>
-                    <div class="rounded-2xl border border-white/10 bg-white/10 p-4">
-                        <div class="text-xs uppercase tracking-[0.16em] text-cyan-100/80">Purpose</div>
-                        <div class="mt-2 text-sm font-medium">Firmware mapping control</div>
-                    </div>
-                    <div class="rounded-2xl border border-white/10 bg-white/10 p-4">
-                        <div class="text-xs uppercase tracking-[0.16em] text-cyan-100/80">Audience</div>
-                        <div class="mt-2 text-sm font-medium">Internal operations team</div>
-                    </div>
-                </div>
             </div>
             <div class="px-6 py-8 sm:px-10 sm:py-12">
                 <div class="mx-auto max-w-md">

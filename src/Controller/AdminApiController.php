@@ -6,6 +6,8 @@ namespace App\Controller;
 
 use App\Repository\SoftwareVersionRepository;
 use App\Service\AdminAuthenticator;
+use App\Service\AuditLogger;
+use App\Service\CsrfTokenManager;
 use App\Service\RequestRateLimiter;
 use App\Service\SoftwareVersionValidator;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -20,6 +22,8 @@ final class AdminApiController
         private readonly SoftwareVersionRepository $repository,
         private readonly SoftwareVersionValidator $validator,
         private readonly RequestRateLimiter $rateLimiter,
+        private readonly CsrfTokenManager $csrfTokenManager,
+        private readonly AuditLogger $auditLogger,
     ) {
     }
 
@@ -31,6 +35,10 @@ final class AdminApiController
         }
 
         $payload = $this->payload($request);
+        if ($csrf = $this->guardCsrf($request, $payload['csrfToken'] ?? null)) {
+            return $csrf;
+        }
+
         $success = $this->authenticator->login(
             $request,
             (string) ($payload['username'] ?? ''),
@@ -38,7 +46,7 @@ final class AdminApiController
         );
 
         if (!$success) {
-            return new JsonResponse(['success' => false, 'message' => 'Invalid admin credentials.'], Response::HTTP_UNAUTHORIZED);
+            return $this->errorResponse('AUTH_INVALID_CREDENTIALS', 'Invalid admin credentials.', Response::HTTP_UNAUTHORIZED);
         }
 
         return new JsonResponse(['success' => true, 'redirectTo' => '/admin/software-versions']);
@@ -75,13 +83,21 @@ final class AdminApiController
         }
 
         $values = $this->normalizeValues($this->payload($request));
-        $errors = $this->validator->validate($values);
+        if ($csrf = $this->guardCsrf($request, $values['csrfToken'] ?? null)) {
+            return $csrf;
+        }
 
+        $errors = $this->validator->validate($values);
         if ($errors !== []) {
-            return new JsonResponse(['success' => false, 'errors' => $errors], Response::HTTP_UNPROCESSABLE_ENTITY);
+            return $this->errorResponse('VALIDATION_FAILED', 'Validation failed.', Response::HTTP_UNPROCESSABLE_ENTITY, [], ['errors' => $errors]);
         }
 
         $this->repository->create($values);
+        $this->auditLogger->log('software_version_created', [
+            'ip' => $request->getClientIp(),
+            'name' => $values['name'],
+            'system_version_alt' => $values['system_version_alt'],
+        ]);
 
         return new JsonResponse(['success' => true, 'redirectTo' => '/admin/software-versions?notice=' . urlencode('Created software version.')]);
     }
@@ -98,15 +114,25 @@ final class AdminApiController
         }
 
         $values = $this->normalizeValues($this->payload($request));
-        $errors = $this->validator->validate($values, $id);
+        if ($csrf = $this->guardCsrf($request, $values['csrfToken'] ?? null)) {
+            return $csrf;
+        }
 
+        $errors = $this->validator->validate($values, $id);
         if ($errors !== []) {
-            return new JsonResponse(['success' => false, 'errors' => $errors], Response::HTTP_UNPROCESSABLE_ENTITY);
+            return $this->errorResponse('VALIDATION_FAILED', 'Validation failed.', Response::HTTP_UNPROCESSABLE_ENTITY, [], ['errors' => $errors]);
         }
 
         if (!$this->repository->update($id, $values)) {
-            return new JsonResponse(['success' => false, 'message' => 'Software version not found.'], Response::HTTP_NOT_FOUND);
+            return $this->errorResponse('SOFTWARE_VERSION_NOT_FOUND', 'Software version not found.', Response::HTTP_NOT_FOUND);
         }
+
+        $this->auditLogger->log('software_version_updated', [
+            'ip' => $request->getClientIp(),
+            'id' => $id,
+            'name' => $values['name'],
+            'system_version_alt' => $values['system_version_alt'],
+        ]);
 
         return new JsonResponse(['success' => true, 'redirectTo' => '/admin/software-versions?notice=' . urlencode('Updated software version.')]);
     }
@@ -122,11 +148,20 @@ final class AdminApiController
             return $limited;
         }
 
-        $deleted = $this->repository->delete($id);
-
-        if (!$deleted) {
-            return new JsonResponse(['success' => false, 'message' => 'Software version was not found.'], Response::HTTP_NOT_FOUND);
+        $payload = $this->payload($request);
+        if ($csrf = $this->guardCsrf($request, $payload['csrfToken'] ?? null)) {
+            return $csrf;
         }
+
+        $deleted = $this->repository->delete($id);
+        if (!$deleted) {
+            return $this->errorResponse('SOFTWARE_VERSION_NOT_FOUND', 'Software version was not found.', Response::HTTP_NOT_FOUND);
+        }
+
+        $this->auditLogger->log('software_version_deleted', [
+            'ip' => $request->getClientIp(),
+            'id' => $id,
+        ]);
 
         return new JsonResponse(['success' => true]);
     }
@@ -166,6 +201,7 @@ final class AdminApiController
             'st' => trim((string) ($payload['st'] ?? '')),
             'gd' => trim((string) ($payload['gd'] ?? '')),
             'latest' => filter_var($payload['latest'] ?? false, FILTER_VALIDATE_BOOL),
+            'csrfToken' => isset($payload['csrfToken']) ? (string) $payload['csrfToken'] : null,
         ];
     }
 
@@ -175,7 +211,7 @@ final class AdminApiController
             return null;
         }
 
-        return new JsonResponse(['success' => false, 'message' => 'Authentication required.'], Response::HTTP_UNAUTHORIZED);
+        return $this->errorResponse('AUTH_REQUIRED', 'Authentication required.', Response::HTTP_UNAUTHORIZED);
     }
 
     private function guardRateLimit(Request $request, string $bucket, int $limit, int $windowSeconds): ?JsonResponse
@@ -186,14 +222,44 @@ final class AdminApiController
             return null;
         }
 
-        return new JsonResponse(
-            ['success' => false, 'message' => 'Rate limit exceeded. Please wait and try again.'],
+        return $this->errorResponse(
+            'RATE_LIMIT_EXCEEDED',
+            'Rate limit exceeded. Please wait and try again.',
             Response::HTTP_TOO_MANY_REQUESTS,
             [
                 'Retry-After' => (string) $state['retryAfter'],
                 'X-RateLimit-Limit' => (string) $state['limit'],
                 'X-RateLimit-Remaining' => '0',
             ]
+        );
+    }
+
+    private function guardCsrf(Request $request, ?string $providedToken): ?JsonResponse
+    {
+        if ($this->csrfTokenManager->isValid($request, $providedToken)) {
+            return null;
+        }
+
+        return $this->errorResponse('CSRF_INVALID', 'Invalid or missing CSRF token.', Response::HTTP_FORBIDDEN);
+    }
+
+    /**
+     * @param array<string, string> $headers
+     * @param array<string, mixed> $extra
+     */
+    private function errorResponse(string $code, string $message, int $status, array $headers = [], array $extra = []): JsonResponse
+    {
+        return new JsonResponse(
+            array_merge([
+                'success' => false,
+                'error' => [
+                    'code' => $code,
+                    'message' => $message,
+                ],
+                'message' => $message,
+            ], $extra),
+            $status,
+            $headers
         );
     }
 }
